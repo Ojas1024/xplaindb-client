@@ -154,9 +154,13 @@ class XplainDBClient:
             cmd["id_column"] = id_column
         return self.command(cmd)
 
-    def register_vector_field(self, collection: str, text_field: str) -> List[Dict[str, Any]]:
-        """Registers a field in a collection for automatic vectorization on update."""
+    def register_vector_field(self, collection: str, text_field: str, id_column: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Registers a field for vectorization, optionally specifying the document ID column.
+        """
         cmd = {"type": "register_vector_field", "collection": collection, "text_field": text_field}
+        if id_column:
+            cmd["id_column"] = id_column
         return self.command(cmd)
 
     def create_view(self, view_name: str, collection: str, fields: List[str]) -> List[Dict[str, Any]]:
