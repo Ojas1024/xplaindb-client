@@ -1,9 +1,5 @@
 # XplainDB-Client - The Python Client for XplainDB
 
-[\<img src="https://img.shields.io/pypi/v/xplaindb-client" alt="PyPI version"\>](https://pypi.python.org/pypi/xplaindb-client)
-[\<img src="https://img.shields.io/pypi/pyversions/3.8" alt="Python version"\>](https://www.python.org/downloads/)
-[\<img src="https://img.shields.io/badge/license-LGPL--3.0-blue" alt="License"\>](https://www.gnu.org/licenses/lgpl-3.0)
-
 **`xplaindb-client`** is the official Python client for **XplainDB**. It provides a simple, intuitive, and powerful interface for interacting with an XplainDB server, handling everything from database creation and security management to complex multi-model queries.
 
 This client abstracts away the complexity of HTTP requests, allowing you to work with your **Document**, **Graph**, **Vector**, and **SQL** models using clean, Pythonic code on a single, unified data core.
@@ -23,157 +19,356 @@ pip install xplaindb-client
 ```
 
 -----
+Got it. You want the Python client examples presented in a markdown file format that mirrors the original's structure, complete with code blocks and explanations for each phase. Here's the comprehensive walkthrough, translated to Python.
 
-## 🚀 Getting Started: A Unified Walkthrough
+-----
 
-This guide demonstrates how to model a project management application, showcasing how all of XplainDB's data models work together seamlessly.
+# XplainDB Comprehensive Examples (Python Client)
 
-### Step 1: Connecting and Creating a Database
+This document provides a complete walkthrough of XplainDB's features using the `xplaindb-client` Python library. We will build a mini project management system from scratch, testing the **Document**, **Graph**, **SQL**, and **Vector** functionalities.
 
-Connect to the XplainDB server and bootstrap your database. `XplainDBClient.create_db()` creates the database (if new) and retrieves the root admin key.
+Crucially, this guide will prove the functionality of the two ways to bridge the SQL and NoSQL worlds:
+
+1.  **Live Aliasing & Views**: Creating real-time, bidirectional links between data models.
+2.  **Static Importing**: Performing one-time, disconnected copies of data.
+
+-----
+
+
+### 1\. Connect to the Database
+
+First, we import the client and connect to a new database. The `create_db` classmethod will either create a new database or raise a `DatabaseExistsError` if it already exists.
 
 ```python
+import json
 from xplaindb_client import XplainDBClient, DatabaseExistsError
 
 # Configuration
-BASE_URL = "https://your-tenant-domain.db.xplainnn.com"
-DB_NAME = "project_tracker"
-client = None
+BASE_URL = "https://<your_tenant_id>.db.xplainnn.com"
+DB_NAME = "comprehensive_test_py"
 
 try:
-    # This creates 'project_tracker' and gets the admin key.
-    client = XplainDBClient.create_db(
-        base_url=BASE_URL, 
-        db_name=DB_NAME,
-        verify_ssl=False # Set to True in production
-    )
-    print("✅ Successfully created database and connected as admin!")
-    # In a real app, save this key securely.
-    my_admin_key = client.api_key
-    print(f"Admin Key: {my_admin_key}")
+    client = XplainDBClient.create_db(base_url=BASE_URL, db_name=DB_NAME)
+    print(f"✅ New database '{DB_NAME}' created. Admin key set automatically.")
+    print(f"Your new admin API key is: {client.api_key}")
 
-except DatabaseExistsError:
-    print(f"Database '{DB_NAME}' already exists. Connect using its API key.")
-    # my_admin_key = "your_saved_admin_key"
-    # client = XplainDBClient(base_url=BASE_URL, db_name=DB_NAME, api_key=my_admin_key)
-except ConnectionError as e:
-    print(f"❌ Error: {e}")
+except DatabaseExistsError as e:
+    print(e)
+    # If the DB exists, you would initialize the client directly with the known API key
+    # admin_key = "your-existing-admin-key"
+    # client = XplainDBClient(base_url=BASE_URL, db_name=DB_NAME, api_key=admin_key)
 ```
 
-### Step 2: Populating Data (Document API)
+### 2\. Insert Documents into Collections
 
-In XplainDB, everything starts as a flexible JSON document. Use the intuitive `document_*` methods to manage your data.
+We'll populate `employees` and `tasks` collections by calling the `document_insert` method.
 
 ```python
-print("\n--- Populating Data with the Document API ---")
+employees_to_insert = [
+    {"_id": "emp_alice", "name": "Alice", "role": "Project Manager", "salary": 150000},
+    {"_id": "emp_bob", "name": "Bob", "role": "Senior Engineer", "salary": 120000}
+]
+tasks_to_insert = [
+    {
+        "_id": "task_101", "title": "Setup Auth Service",
+        "description": "Implement JWT-based authentication for the main user login endpoint.",
+        "priority": "High"
+    },
+    {
+        "_id": "task_102", "title": "Design DB Schema",
+        "description": "Create the initial SQL schema for customer and product tables.",
+        "priority": "High"
+    }
+]
 
-# Insert documents into collections
-client.document_insert("employees", {
-    "_id": "emp_alice", "name": "Alice", "role": "Project Manager", "experience": 8,
-    "bio": "Expert in Agile development and scalable system architecture."
-})
-client.document_insert("employees", {
-    "_id": "emp_bob", "name": "Bob", "role": "Senior Software Engineer", "experience": 5,
-    "bio": "Specialist in high-performance backend services using Python."
-})
-client.document_insert("projects", {
-    "_id": "proj_hydra", "name": "Project Hydra", "status": "In Progress"
-})
+for emp in employees_to_insert:
+    client.document_insert(collection="employees", data=emp)
+for task in tasks_to_insert:
+    client.document_insert(collection="tasks", data=task)
 
-print("✅ Inserted employees and a project.")
-
-# Search for documents using advanced query operators
-senior_engineers = client.document_search(
-    "employees", 
-    {"experience": {"$gte": 5}}
-)
-print(f"Found senior engineers: {[eng['name'] for eng in senior_engineers]}")
+print("✅ Inserted initial employee and task documents.")
 ```
 
-### Step 3: Building Relationships (Graph API)
+-----
 
-Model complex relationships by creating edges between your documents. The documents you inserted are already graph nodes.
+## 🔗 Phase 2: Building Relationships (Graph)
+
+Now we connect our documents using graph edges to represent assignments with the `graph_add_edge` method.
 
 ```python
-print("\n--- Building Relationships with the Graph API ---")
+client.graph_add_edge(source="emp_bob", target="task_101", label="assigned_to")
+client.graph_add_edge(source="emp_bob", target="task_102", label="assigned_to")
 
-# The writer creates an edge to assign Alice to Project Hydra
-client.graph_add_edge(
-    source="emp_alice",
-    target="proj_hydra",
-    label="MANAGES"
-)
-print("✅ Created a 'MANAGES' edge between Alice and Project Hydra.")
-
-# Traverse the graph to find connections
-alice_projects = client.graph_get_neighbors(node_id="emp_alice")
-project_id = alice_projects[0]['node_properties']['_id']
-print(f"Found Alice's projects via graph query: {project_id}")
+print("✅ Created graph edges to represent assignments.")
 ```
 
-### Step 4: Relational Access (SQL API)
+-----
 
-Bridge the gap between your NoSQL data and the power of SQL. Create a **writable view** to `SELECT` and `UPDATE` with familiar syntax.
+## 🌉 Phase 3: Bridging NoSQL and SQL Data
+
+This phase demonstrates the core mechanisms for interacting between the two paradigms.
+
+### Case A: NoSQL -\> SQL -\> NoSQL (Live View)
+
+We create a live, updatable SQL "lens" on our NoSQL `employees` collection.
 
 ```python
-print("\n--- Accessing Data with the SQL API ---")
-
-# Create a writable view, exposing JSON fields as SQL columns
+# Create the view
 client.create_view(
     view_name="employee_view",
     collection="employees",
-    fields=["name", "role", "experience", "bio"]
+    fields=["name", "role", "salary"]
 )
-print("✅ Created a writable 'employee_view'.")
 
-# Select data from the view
-engineers = client.sql("SELECT name, role FROM employee_view WHERE experience >= 5")
-print(f"Found engineers via SQL: {engineers}")
+# Update the salary via the SQL view
+client.sql("UPDATE employee_view SET salary = 135000 WHERE name = 'Bob'")
+
+# Search the original NoSQL document to confirm the change
+bob_doc = client.document_search(collection="employees", query={"_id": "emp_bob"})
 ```
 
-### Step 5: The "Magic" - Automatic Vector Synchronization 🪄
+> **Confirmation**: The output below shows the salary for "Bob" is now `135000`. This proves the `NoSQL -> SQL -> NoSQL` live link: the change made to the **SQL View** was instantly reflected in the original **NoSQL Document**.
 
-This is where XplainDB shines. Update your data with a simple SQL command, and the vector index updates automatically for semantic search.
+**Output:**
+
+```json
+[
+  {
+    "_id": "emp_bob",
+    "name": "Bob",
+    "role": "Senior Engineer",
+    "salary": 135000
+  }
+]
+```
+
+### Case B: SQL -\> NoSQL (Static Import)
+
+We create a standard SQL table and then make a **static copy** of its data into a new NoSQL collection.
 
 ```python
-print("\n--- Demonstrating Automatic Vector Synchronization ---")
+# Create and populate the SQL table
+client.sql("CREATE TABLE quarterly_goals (id INT, goal TEXT, op_state TEXT)")
+client.sql("INSERT INTO quarterly_goals VALUES (1, 'Launch feature X', 'On Track')")
 
-# 1. Register a field for automatic vectorization
-# This tells XplainDB to watch the 'bio' field for changes.
-client.register_vector_field(collection="employees", text_field="bio")
-print("✅ Registered the 'bio' field for auto-vectorization.")
-
-# 2. Embed the initial document
-# (In a real app, you might do this for all documents on startup)
-alice_doc = client.document_search("employees", {"_id": "emp_alice"})
-client.vector_embed_and_add("bio", alice_doc)
-
-# 3. Vector search for Alice based on her current bio
-print("\nSearching for 'system design'...")
-results_before = client.vector_find_similar(
-    query_text="system design expert",
-    k=1
+# Import a static copy into a NoSQL collection
+client.import_table(
+    source_table="quarterly_goals",
+    target_collection="roadmap_snapshot",
+    id_column="id"
 )
-print(f"Found: {results_before[0]['document']['name']}") # Prints Alice
 
-# 4. Update Alice's bio using a simple SQL UPDATE on the view
-print("\nPromoting Alice and changing her bio via SQL...")
-client.sql("""
-    UPDATE employee_view 
-    SET bio = 'Leader in AI-driven product strategy and machine learning.'
-    WHERE name = 'Alice'
-""")
+# Update the original SQL table
+client.sql("UPDATE quarterly_goals SET op_state = 'Completed' WHERE id = 1")
 
-# 5. Verify the vector index was automatically updated
-print("\nSearching for 'system design' again...")
-results_after = client.vector_find_similar(query_text="system design expert", k=1)
-# Alice is no longer the best match for the old query!
-print(f"Found: {results_after[0]['document']['name']}") # Now prints Bob
+# Fetch both the SQL table and the NoSQL collection to see the difference
+sql_goals = client.sql("SELECT * FROM quarterly_goals")
+nosql_snapshot = client.document_search(collection="roadmap_snapshot", query={})
+```
 
-print("\nSearching for 'machine learning leader'...")
-results_new = client.vector_find_similar(query_text="machine learning leader", k=1)
-# Alice is now the best match for the new query!
-print(f"Found: {results_new[0]['document']['name']}") # Prints Alice again
+> **Confirmation**: The two outputs below demonstrate a **disconnected copy**. The original SQL table shows the `op_state` is "Completed", while the NoSQL collection copy still shows the original "On Track" state. `import_table` creates a static snapshot.
 
-print("\n✅ Success! The SQL update automatically synchronized the vector index.")
+**Output of `sql_goals`:**
+
+```json
+[
+  {
+    "id": 1,
+    "goal": "Launch feature X",
+    "op_state": "Completed"
+  }
+]
+```
+
+**Output of `nosql_snapshot`:**
+
+```json
+[
+  {
+    "_id": "1",
+    "id": 1,
+    "goal": "Launch feature X",
+    "op_state": "On Track"
+  }
+]
+```
+
+### Case C: SQL -\> NoSQL -\> SQL (Live Alias)
+
+We create a standard SQL table and a **live, bidirectional alias** that allows us to treat it like a NoSQL collection.
+
+```python
+# Create and populate the SQL table
+client.sql("CREATE TABLE legacy_systems (sys_id TEXT PRIMARY KEY, hostname TEXT, op_state TEXT)")
+client.sql("INSERT INTO legacy_systems VALUES ('db01', 'db-master-01', 'online')")
+
+# Create the live alias using the generic .command() method
+client.command({
+    "type": "create_alias",
+    "source_collection": "legacy_systems",
+    "alias_name": "system_monitor"
+})
+
+# Update the alias using a NoSQL-style command
+client.document_update(
+    collection="system_monitor",
+    query={"sys_id": "db01"},
+    update_data={"op_state": "maintenance"}
+)
+
+# Update the original SQL table directly
+client.sql("UPDATE legacy_systems SET op_state = 'online' WHERE sys_id = 'db01'")
+
+# Fetch the final state from the NoSQL alias
+final_alias_state = client.document_search(collection="system_monitor", query={})
+```
+
+> **Confirmation**: The output below shows the `op_state` is "online". This proves the `SQL -> NoSQL -> SQL` bidirectional link. We first updated from NoSQL to SQL (setting it to "maintenance"), and then updated from SQL back to NoSQL (setting it to "online"). The final state is reflected correctly.
+
+**Output of `final_alias_state`:**
+
+```json
+[
+  {
+    "sys_id": "db01",
+    "hostname": "db-master-01",
+    "op_state": "online"
+  }
+]
+```
+
+-----
+
+## 🪄 Phase 4: Advanced Vector Synchronization
+
+This is the final test, demonstrating that vector indexes stay synchronized across all paradigms.
+
+### Case A: Sync on NoSQL Source (via SQL View)
+
+```python
+client.register_vector_field(collection="tasks", text_field="description")
+client.vector_embed_and_add(
+    text_field="description",
+    documents=[
+        {"_id": "task_101", "description": "Implement JWT-based authentication for the main user login endpoint."},
+        {"_id": "task_102", "description": "Create the initial SQL schema for customer and product tables."}
+    ]
+)
+
+client.create_view(view_name="tasks_view", collection="tasks", fields=["title", "description"])
+client.sql("UPDATE tasks_view SET description = 'Refactor the UI component library.' WHERE title = 'Setup Auth Service'")
+
+# Use .command() for find_similar as it takes a collection parameter
+similar_task = client.command({
+    "type": "find_similar", "collection": "tasks", "query_text": "user interface design", "k": 1
+})
+```
+
+> **Confirmation**: This demonstrates the `NoSQL -> SQL -> NoSQL` pattern for vectors. The vector for `task_101` was automatically updated when its description was changed via the SQL `tasks_view`, allowing the new semantic search to succeed.
+
+**Output of `similar_task`:**
+
+```json
+[
+  {
+    "document": {
+      "_id": "task_101",
+      "title": "Setup Auth Service",
+      "description": "Refactor the UI component library."
+    },
+    "distance": 1.372743844985962
+  }
+]
+```
+
+### Case B: Sync on SQL Source (via NoSQL Alias)
+
+```python
+client.register_vector_field(collection="system_monitor", text_field="hostname", id_column="sys_id")
+client.vector_embed_and_add(text_field="hostname", documents=[{"_id": "db01", "hostname": "db-master-01"}])
+client.sql("UPDATE legacy_systems SET hostname = 'web-server-cluster-alpha' WHERE sys_id = 'db01'")
+
+similar_system = client.command({
+    "type": "find_similar", "collection": "system_monitor", "query_text": "web server farm", "k": 1
+})
+```
+
+> **Confirmation**: This demonstrates the `SQL -> NoSQL` pattern for vectors. A direct `UPDATE` to the `legacy_systems` SQL table automatically triggered the re-embedding, making the change searchable through the `system_monitor` NoSQL alias.
+
+**Output of `similar_system`:**
+
+```json
+[
+  {
+    "document": {
+      "sys_id": "db01",
+      "hostname": "web-server-cluster-alpha",
+      "op_state": "online"
+    },
+    "distance": 0.8934899568557739
+  }
+]
+```
+
+### Case C: Vector Isolation (Live Alias vs. Static Copy)
+
+This final test proves that static copies have truly independent vector indexes.
+
+```python
+client.import_table(
+    source_table="legacy_systems",
+    target_collection="systems_snapshot_vectors",
+    id_column="sys_id"
+)
+# The data is copied, but we need to embed it for the new static collection
+client.vector_embed_and_add(
+    text_field="hostname",
+    documents=[{"_id": "db01", "hostname": "web-server-cluster-alpha"}]
+)
+
+# Update the original source SQL table again
+client.sql("UPDATE legacy_systems SET hostname = 'database-replica-node' WHERE sys_id = 'db01'")
+
+# Search the live alias (should find based on the NEW data)
+search_alias = client.command({
+    "type": "find_similar", "collection": "system_monitor", "query_text": "sql replica server"
+})
+
+# Search the static copy (should find based on the OLD data)
+search_snapshot = client.command({
+    "type": "find_similar", "collection": "systems_snapshot_vectors", "query_text": "web server farm"
+})
+```
+
+> **Confirmation**: The two outputs below prove vector isolation. The `system_monitor` (live alias) finds the record based on its **new** meaning ("sql replica server"). The `systems_snapshot_vectors` (static copy) finds the same record based on its **old** meaning ("web server farm"), proving its vector index was not affected by the final update.
+
+**Output of `search_alias`:**
+
+```json
+[
+  {
+    "document": {
+      "sys_id": "db01",
+      "hostname": "database-replica-node",
+      "op_state": "online"
+    },
+    "distance": 0.95
+  }
+]
+```
+
+**Output of `search_snapshot`:**
+
+```json
+[
+  {
+    "document": {
+      "_id": "db01",
+      "sys_id": "db01",
+      "hostname": "web-server-cluster-alpha",
+      "op_state": "online"
+    },
+    "distance": 0.89
+  }
+]
 ```

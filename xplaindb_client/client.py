@@ -1,3 +1,5 @@
+# xplaindb_client/client.py
+
 import requests
 import urllib3
 import json
@@ -14,26 +16,27 @@ class DatabaseExistsError(Exception):
 
 class XplainDBClient:
     """
-    A Python client for interacting with an XplainDB v3.0.0 server.
-    
-    It is recommended to create a client instance using the create_db() classmethod 
+    A Python client for interacting with an XplainDB v3.x server.
+
+    It is recommended to create a client instance using the create_db() classmethod
     or by providing an existing API key.
-    
+
     Args:
         base_url (str): The base URL of the XplainDB server.
         db_name (str): The name of the database to connect to.
         api_key (str): The API key for authentication.
-        verify_ssl (bool): Set to False to disable SSL certificate verification. Defaults to True.
+        verify_ssl (bool): Set to True to enable SSL certificate verification.
+                           Defaults to False for local development convenience.
     """
-    def __init__(self, base_url: str, db_name: str, api_key: str, verify_ssl: bool = True):
+    def __init__(self, base_url: str, db_name: str, api_key: str, verify_ssl: bool = False):
         if not all([base_url, db_name, api_key]):
             raise ValueError("Base URL, DB name, and API key are all required.")
-        
+
         self.base_url = base_url.rstrip('/')
         self.db_name = db_name
         self.api_key = api_key
         self._rest_url = f"{self.base_url}/{self.db_name}/query"
-        
+
         if not verify_ssl:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -45,7 +48,7 @@ class XplainDBClient:
         })
 
     @classmethod
-    def create_db(cls, base_url: str, db_name: str, verify_ssl: bool = True) -> 'XplainDBClient':
+    def create_db(cls, base_url: str, db_name: str, verify_ssl: bool = False) -> 'XplainDBClient':
         """
         Connects to a new XplainDB database, creates it, and retrieves its admin key.
         If the database already exists, raises DatabaseExistsError.
@@ -55,20 +58,23 @@ class XplainDBClient:
         """
         print(f"--- Bootstrapping new database '{db_name}'...")
         bootstrap_url = f"{base_url.rstrip('/')}/{db_name}/bootstrap"
-        
+
         if not verify_ssl:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-            
+
         try:
             response = requests.get(bootstrap_url, timeout=10, verify=verify_ssl)
             if response.status_code == 403:
-                raise DatabaseExistsError(f"Database '{db_name}' already exists. Initialize the client directly with its API key.")
-            
+                raise DatabaseExistsError(
+                    f"Database '{db_name}' already exists. "
+                    "Initialize the client directly with its API key."
+                )
+
             response.raise_for_status()
             key = response.json().get("admin_key")
             if not key:
                 raise ValueError("Admin key not found in bootstrap response.")
-            
+
             print(f"✅ Success: Retrieved new admin key for '{db_name}'.")
             return cls(base_url=base_url, db_name=db_name, api_key=key, verify_ssl=verify_ssl)
         except requests.exceptions.RequestException as e:
@@ -92,9 +98,9 @@ class XplainDBClient:
         response = self._make_request({"query": cmd_dict})
         return response.get("result", [])
 
-    def sql(self, query: str) -> List[Dict[str, Any]]:
-        """Executes a raw SQL query."""
-        response = self._make_request({"query": query})
+    def sql(self, query: str, convert: bool = False) -> List[Dict[str, Any]]:
+        """Executes a raw SQL query, with an option to convert to NoSQL."""
+        response = self._make_request({"query": query, "convert_sql": convert})
         return response.get("result", [])
 
     # --- Document API ---
@@ -102,7 +108,7 @@ class XplainDBClient:
         """Inserts a single document into a collection."""
         cmd = {"type": "insert", "collection": collection, "data": data}
         return self.command(cmd)
-    
+
     def document_search(self, collection: str, query: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Searches for documents in a collection matching a query."""
         cmd = {"type": "search", "collection": collection, "query": query}
@@ -112,7 +118,7 @@ class XplainDBClient:
         """Updates documents matching a query using a $set operation."""
         cmd = {"type": "update", "collection": collection, "query": query, "update": {"$set": update_data}}
         return self.command(cmd)
-        
+
     def document_delete(self, collection: str, query: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Deletes documents from a collection matching a query."""
         cmd = {"type": "delete", "collection": collection, "query": query}
@@ -141,6 +147,13 @@ class XplainDBClient:
         return self.command(cmd)
 
     # --- Admin & Schema API ---
+    def import_table(self, source_table: str, target_collection: str, id_column: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Imports an SQL table into a NoSQL collection."""
+        cmd = {"type": "import_table", "source_table": source_table, "target_collection": target_collection}
+        if id_column:
+            cmd["id_column"] = id_column
+        return self.command(cmd)
+
     def register_vector_field(self, collection: str, text_field: str) -> List[Dict[str, Any]]:
         """Registers a field in a collection for automatic vectorization on update."""
         cmd = {"type": "register_vector_field", "collection": collection, "text_field": text_field}
@@ -158,4 +171,5 @@ class XplainDBClient:
         
         cmd = {"type": "create_key", "permissions": permissions}
         result = self.command(cmd)
+
         return result[0] if result else {}
